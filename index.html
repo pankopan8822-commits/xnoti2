@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>#lol募集 最速通知</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 50px; background: #f4f6f9; color: #333; }
+    .container { max-width: 400px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+    .btn { background: #1d9bf0; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 25px; cursor: pointer; font-weight: bold; width: 100%; box-shadow: 0 2px 5px rgba(29,155,240,0.3); }
+    .btn:active { background: #1a8cd8; }
+    .status { margin-top: 25px; font-size: 14px; color: #666; font-weight: bold; line-height: 1.6; word-break: break-all; }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    <h2>#lol募集 最速通知</h2>
+    <p style="font-size: 14px; color: #666;">このページを「ホーム画面に追加」して起動し、下のボタンを押して通知を許可してください。</p>
+    
+    <button class="btn" id="auth-btn">通知を有効にする</button>
+    <div class="status" id="status-msg">状態: 準備完了（独自ドメイン通信モード）</div>
+  </div>
+
+  <script>
+    // ➔ 【設定】あなたのGASウェブアプリのURL（/exec）をここに貼り付けてください
+    const GAS_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzJZQ00zkmQ0YUE1P3z-mogBWZT6Y76_LsNA7RYWtbbWmZoCKMj4GrL8JAvwgDx3RYVyw/exec";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBVSs_5XPGfPbwQY0XmLit1dOeD8ELSB28",
+      authDomain: "xnoti-f59fc.firebaseapp.com",
+      projectId: "xnoti-f59fc",
+      storageBucket: "xnoti-f59fc.firebasestorage.app",
+      messagingSenderId: "868959057587",
+      appId: "1:868959057587:web:9915e5de04ffa6a04a22c6"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
+
+    document.getElementById('auth-btn').addEventListener('click', async () => {
+      const statusMsg = document.getElementById('status-msg');
+      statusMsg.style.color = "#666";
+      statusMsg.innerText = "【1/4】通知許可をリクエスト中...";
+
+      try {
+        // 独自オリジン（ドメイン）になったため、ここでiOSのブロックを回避してダイアログが発火します
+        const permission = await Notification.requestPermission();
+        
+        if (permission !== 'granted') {
+          throw new Error("⚠️通知が許可されませんでした。 (状態: " + permission + ")");
+        }
+
+        statusMsg.innerText = "【2/4】通知許可OK！サービスワーカー登録中...";
+        
+        const registration = await navigator.serviceWorker.register('data:text/javascript;base64,' + btoa(`
+          importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
+          importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
+          firebase.initializeApp(${JSON.stringify(firebaseConfig)});
+          const messaging = firebase.messaging();
+          messaging.onBackgroundMessage((payload) => {
+            self.registration.showNotification(payload.notification.title, {
+              body: payload.notification.body,
+              icon: payload.notification.icon
+            });
+          });
+        `));
+
+        statusMsg.innerText = "【3/4】Firebaseトークン取得中...";
+
+        const currentToken = await messaging.getToken({ 
+          vapidKey: 'BIwFHleOUHxXoCYt7CktYHwl_n3GOI9VlXmqJOcFvcDrrA9d41mTHeHpeWP3qMM2mJ6iFYiC6UWvyXJMbbKRbkI',
+          serviceWorkerRegistration: registration 
+        });
+
+        statusMsg.innerText = "【4/4】GASスプレッドシートへAPI送信中...";
+
+        // fetchAPIを使って、GASのdoPostへトークンを非同期送信
+        const response = await fetch(GAS_WEBAPP_URL, {
+          method: 'POST',
+          mode: 'no-cors', // クロスドメイン（CORS）制限を回避するおまじない
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ token: currentToken })
+        });
+
+        // no-corsモードの場合レスポンス内容が読めないため、送信完了扱いで処理を落とします
+        statusMsg.style.color = "#2b9348";
+        statusMsg.innerText = "✨登録処理を送信しました！GASのスプレッドシートを確認してください。";
+
+      } catch (err) {
+        statusMsg.style.color = "#d93025";
+        statusMsg.innerText = err.message;
+      }
+    });
+  </script>
+</body>
+</html>
